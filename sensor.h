@@ -10,3 +10,8 @@ int batteryStatus()
 {
     return 50;
 }
+
+int estrusScan() //mengembalikan nilai pembacaan estrus
+{
+    return 50;
+}
