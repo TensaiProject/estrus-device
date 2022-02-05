@@ -18,7 +18,7 @@ int batteryStatus()
 {
     int senBatt = analogRead(pinBatt);
     float Voltage = senBatt * (3.3 /4096);
-    int battPercentage = 100 * (Voltage - 3.2)/(3.7-3.2);
+    int battPercentage = 100 * (Voltage - 3.3)/(3.7-3.3);
     
     if (batPercentage < 0)
     {
