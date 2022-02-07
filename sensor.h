@@ -34,18 +34,22 @@ int batteryStatus()
 
 int estrusScan() //mengembalikan nilai pembacaan estrus
 {
-    
-  
+  //MA
+  SUM = SUM - READINGS[INDEX];
   VALUE = analogRead(pinEstrus);
-  
-  Serial.print(VALUE);
-  Serial.print(",");
-  delay(100);
-  
   READINGS[INDEX] = VALUE;
   SUM = SUM + VALUE; 
   INDEX = (INDEX+1) % WINDOW_SIZE;
   AVERAGED = SUM / WINDOW_SIZE;
-  Serial.println(AVERAGED);
+
+  //Exp
+  hasil = bobot * VALUE + (1 - bobot) * hasil;
+    
+  Serial.print(VALUE);
+  Serial.print(",");
+  Serial.print(AVERAGED);
+  Serial.print(",");
+  Serial.println(hasil);
+    
   return AVERAGED;
 }
