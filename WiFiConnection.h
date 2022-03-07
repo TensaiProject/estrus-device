@@ -1,20 +1,25 @@
 #include "WiFi.h"
-
+#include <HTTPClient.h>
 String wifiListString;
 int WifiPage = 0;
 int lastWifiPage = 0;
+String PostEstrusURL = "http://estrus.iotum.id/public/Sapi";
 
 void ClearListWiFi()
 {
     myNex.writeStr("t4.txt", "");
+    delay(10);
     myNex.writeStr("t5.txt", "");
+    delay(10);
     myNex.writeStr("t6.txt", "");
+    delay(10);
 }
 
 bool WiFiStatus(){
     if (WiFi.status() == WL_CONNECTED)
     {
         myNex.writeStr("t2.txt", WiFi.SSID());
+        delay(10);
         return true;
     }
     else
@@ -22,6 +27,7 @@ bool WiFiStatus(){
         Serial.print("status WiFi");
         Serial.println(WiFi.status());
         myNex.writeStr("t2.txt", "Tidak terkoneksi");
+        delay(10);
         return false;
     }
 }
@@ -30,32 +36,37 @@ void WiFiStatusAfterConnecting()
         if(WiFi.status() == WL_CONNECTED){
         Serial.printf("WiFi berhasil terkoneksi\n");
         myNex.writeNum("bt0.val", 0);
+        delay(10);
         myNex.writeNum("disconnect.val", 0);
+        delay(10);
         // myNex.writeStr("t2.txt", WiFi.SSID());
         // myNex.writeNum("refreshWiFi.val", 0);
     }
     else{
         Serial.printf("WiFi gagal terkoneksi\n");
         myNex.writeNum("bt0.val", 1);
+        delay(10);
         myNex.writeNum("disconnect.val", 1);
-        // myNex.writeStr("t2.txt", "Tidak terkoneksi");
-        // myNex.writeNum("refreshWiFi.val", 0);
+        delay(10);
     }
 }
 void WiFiDisconnect(){
     WiFi.disconnect();
     myNex.writeStr("t2.txt", "Tidak terkoneksi");
+    delay(10);
 }
 void WiFiScan()
 {
     Serial.printf("startScan \n");
     myNex.writeStr("t7.txt","sedang memindai WiFi");
+    delay(10);    
     ClearListWiFi();
     wifiListString = "";
     WifiPage = 0;
     lastWifiPage = 0;
     int n = WiFi.scanNetworks();
-    if (n != 0)
+    Serial.printf("jumlah wifi : %d\n", n);
+    if (n > 0)
     {
         
         int i;
@@ -68,12 +79,16 @@ void WiFiScan()
             }
         }
         myNex.writeStr("t7.txt","");
+        delay(10);
     }
     else{
         myNex.writeStr("t7.txt","WiFi tidak tersedia");
+        delay(10);
     }
     myNex.writeNum("wifiPage.val", WifiPage);
+    delay(10);
     myNex.writeNum("refreshWiFi.val", 0);
+    delay(10);
 }
 
 void WiFiList()
@@ -99,36 +114,23 @@ void WiFiList()
                 switch(i-(WifiPage * 3)){
                     case 0:
                         myNex.writeStr("t4.txt", WiFiName);
+                        delay(10);
                     break;
                     case 1:
                         myNex.writeStr("t5.txt", WiFiName);
+                        delay(10);
                     break;
                     case 2:
                         myNex.writeStr("t6.txt", WiFiName);
+                        delay(10);
                     break;
                 }
             }
             startPos = commaPos + 1;
             commaPos = wifiListString.indexOf(",", startPos);
-            // Serial.println(WifiListArray[i]);
             i++;
             
         }
-        // WiFiPageButton(WifiPage, i);
-        // delay(10);
-        
-        // Serial.printf("mengirim list 1\n");
-        
-        // delay(10);
-        // Serial.printf("mengirim list 2\n");
-        // myNex.writeStr("t5.txt", WifiListArray[startListonPage + 1]);
-        // delay(10);
-        // Serial.printf("mengirim list 3\n");
-        // myNex.writeStr("t6.txt", WifiListArray[startListonPage + 2]);
-        // delay(10);
-        // Serial2.flush();
-        // Serial.printf("selesai mengirim\n");
-
     }
 }
 
@@ -155,14 +157,18 @@ void WiFiSettingPage(bool refresh)
     if(WiFiStatus())
     {
         myNex.writeNum("disconnect.val", 0);
+        delay(10);
         if(myNex.readNumber("bt0.val")){
+            delay(10);
             WiFiDisconnect();
         }
     }
     else
     {
         myNex.writeNum("bt0.val", 1);
+        delay(10);
         myNex.writeNum("disconnect.val", 1);
+        delay(10);
     }
 
     (myNex.readNumber("refreshWiFi.val") == 1) ? WiFiScan() : WiFiList();
@@ -182,12 +188,12 @@ void WiFiSettingPage(bool refresh)
 
 void WiFiConnectingPage(bool refresh){
     String SSID = myNex.readStr("t1.txt");
-    delay(50);
+    delay(10);
     // char SSIDcon[SSID.length()];
     // SSID.toCharArray(SSIDcon, SSID.length()+1);
     const char* SSIDcon = SSID.c_str();
     String Pass = myNex.readStr("pass.txt");
-    delay(50);
+    delay(10);
     const char* Passcon = Pass.c_str();
     // char Passcon[Pass.length()];
     // Pass.toCharArray(Passcon, Pass.length()+1);
@@ -212,18 +218,36 @@ void WiFiConnectingPage(bool refresh){
         delay(50);
         Serial.printf(".");
         if(myNex.readNumber("abort.val") == 1){
+            delay(10);
             WiFi.disconnect();
-            myNex.writeStr("page 4");
+            myNex.writeStr("page WiFisetting");
+            delay(10);
         }
     }
-    Serial.printf("pindah halamanke 4\n");
-    myNex.writeStr("page 4");
+    Serial.printf("pindah halaman ke wifi setting\n");
+    myNex.writeStr("page WiFisetting");
+    delay(10);
     WiFiStatusAfterConnecting();
     // Serial.printf("selesai menyambung WiFi\n");
 
 }
 
 bool dataSendWiFi(int IDSapi, int EstrusVal){
-    return true;
+    HTTPClient http;
+    WiFiClient client;
+
+    http.begin(client, PostEstrusURL);
+    http.addHeader("Content-Type", "application/json");
+    String json = "{\"ID_sapi\":\"sapi-"+String(IDSapi)+"\",\"data\":"+String(EstrusVal)+"}";
+    int httpCode = http.POST(json);
+    Serial.printf("HTTP code: %d\n", httpCode);
+    if(httpCode ==HTTP_CODE_CREATED)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 

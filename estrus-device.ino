@@ -5,7 +5,13 @@
 
 #include "WiFiConnection.h"
 
-#define DATA_REFRESH_RATE 100 // The time between each Data refresh of the page
+#include "SPI.h"
+#include "SD.h"
+File amountSaved;
+File EstrusSaved;
+File SapiSaved;
+
+#define DATA_REFRESH_RATE 150 // The time between each Data refresh of the page
                                // Depending on the needs of the project, the DATA_REFRESH_RATE can be set
                                // to 50ms or 100ms without a problem. In this example, we use 1000ms, 
                                // as DHT sensor is a slow sensor and gives measurements every 2 seconds
@@ -121,20 +127,35 @@ void statSaveSendPage(bool refresh)
             {
                 myNex.writeStr("t1.txt", "tersambung ke WiFi");
                 delay(200);
-                int amountSavedData = AmountSavedSDcard();
+                int amountSavedData = AmountSavedSDcard(false);
+                Serial.printf("amountSavedData %d\n", amountSavedData);
                 if(amountSavedData > 0)
                 {
+                    Serial.printf("ngirim beberapa kali. \n amountSavedData %d\n", amountSavedData);
                     // dataSendWiFi 1 by 1
-                    for (int i = 0; i <= amountSavedData - 1; i++)
+                    int i = 0;
+                    saveDataSDcard(SapiID, EstrusVal);
+                    while(AmountSavedSDcard(false) > 0)
                     {
-                        myNex.writeStr("t1.txt", "("+String(i) + "/" + String(amountSavedData) + ")"+" Mengirim data" );
-                        Serial.printf("dataSendWiFi %d\n", i);
-                        (dataSendWiFi(SapiSavedSDcard(i), EstrusSavedSDcard(i))) ? myNex.writeStr("t1.txt", "("+String(i) + "/" + String(amountSavedData) + ")"+ "Data Terkirim") : myNex.writeStr("t1.txt","("+String(i) + "/" + String(amountSavedData) + ")"+ "Data Gagal Terkirim");
-                        delay(100);    
+                        i++;
+                        myNex.writeStr("t1.txt", "mengirim data ke-" + String(i));
+                        if(!dataSendWiFi(SapiSavedSDcard(false),EstrusSavedSDcard(false)))
+                        {
+                            myNex.writeStr("t1.txt", "gagal mengirim data");
+                            break;
+                        }
+                        else
+                        {
+                            SapiSavedSDcard(true);
+                            EstrusSavedSDcard(true);
+                            AmountSavedSDcard(true);
+                            myNex.writeStr("t1.txt", " berhasil dikirim ");
+                        }
                     }
                 }
                 else
                 {
+                    Serial.printf("ngirim data sekali");
                     myNex.writeStr("t1.txt", "proses mengirim data");
                     delay(200);
                     (dataSendWiFi(SapiID, EstrusVal)) ? myNex.writeStr("t1.txt", "Data Terkirim") : myNex.writeStr("t1.txt", "Data Gagal Terkirim");
@@ -148,6 +169,25 @@ void statSaveSendPage(bool refresh)
                 //simpan data ke sdcard            
             }
         }
+        else if (myNex.readNumber("via.val") == 1)
+        {
+            if(!SD.begin(5))
+            {
+                myNex.writeStr("t1.txt", "gagal membuka SD");
+            }
+            else
+            {
+                myNex.writeStr("t1.txt", "membuka SD");
+                delay(200);
+                //simpan data ke sdcard
+                Serial.printf("SapiID %d\n", SapiID);
+                Serial.printf("EstrusVal %d\n", EstrusVal);
+                if(saveDataSDcard(SapiID, EstrusVal)){
+                    myNex.writeStr("t1.txt", "sukses menyimpan data ke SD");
+                }
+            }
+
+        }
         myNex.writeNum("finish.val", 1);
         delay(50);
         myNex.writeNum("bt0.val",0);
@@ -155,14 +195,215 @@ void statSaveSendPage(bool refresh)
     }
 }
 
-int AmountSavedSDcard(){
-    return 0;
+int AmountSavedSDcard(bool deleteData){
+    if(SD.exists("/amountSaved.txt"))
+    {
+        amountSaved = SD.open("/amountSaved.txt");
+        String amountSavedString ="";
+        while(amountSaved.available())
+        {
+            amountSavedString += amountSaved.readString();
+        }
+        int amountSaveInt = amountSavedString.toInt();
+        amountSaved.close();
+        if(!deleteData)
+        {
+            return amountSaveInt;
+        }
+        else
+        {
+            amountSaveInt--;
+            amountSaved = SD.open("/amountSaved.txt", FILE_WRITE);
+            amountSaved.print(amountSaveInt);
+            amountSaved.close();
+            return amountSaveInt;
+        } 
+    }
+
 }
 
-int EstrusSavedSDcard(int array){
-    return 0;
+int EstrusSavedSDcard(bool deleteData){
+    if(!deleteData) //baca doang
+    {
+        EstrusSaved = SD.open("/estrusSaved.txt");
+        String EstrusSavedString ="";
+        while(EstrusSaved.available())
+        {
+            EstrusSavedString += EstrusSaved.readString();
+        }
+        EstrusSaved.close();
+        return EstrusSavedString.substring(0,EstrusSavedString.indexOf(",")).toInt();
+    }
+    else
+    {
+        EstrusSaved = SD.open("/estrusSaved.txt");
+        String EstrusSavedString ="";
+        while(EstrusSaved.available())
+        {
+            EstrusSavedString += EstrusSaved.readString();
+        }
+        EstrusSaved.close();
+        EstrusSavedString.remove(0,EstrusSavedString.indexOf(",")+1);
+        EstrusSaved = SD.open("/estrusSaved.txt", FILE_WRITE);
+        EstrusSaved.print(EstrusSavedString);
+        EstrusSaved.close();
+        return -1;
+    }
 }
 
-int SapiSavedSDcard(int array){
-    return 0;
+int SapiSavedSDcard(bool deleteData){
+    if(!deleteData){
+        SapiSaved = SD.open("/sapiSaved.txt");
+        String SapiSavedString ="";
+        while(SapiSaved.available())
+        {
+            SapiSavedString += SapiSaved.readString();
+        }
+        SapiSaved.close();
+        return SapiSavedString.substring(0,SapiSavedString.indexOf(",")).toInt();
+    }
+    else
+    {
+        SapiSaved = SD.open("/sapiSaved.txt");
+        String SapiSavedString ="";
+        while(SapiSaved.available())
+        {
+            SapiSavedString += SapiSaved.readString();
+        }
+        SapiSaved.close();
+        SapiSavedString.remove(0,SapiSavedString.indexOf(",")+1);
+        SapiSaved = SD.open("/sapiSaved.txt", FILE_WRITE);
+        SapiSaved.print(SapiSavedString);
+        SapiSaved.close();
+        return -1;
+    }
+}
+
+bool saveDataSDcard(int SapiID, int EstrusVal){
+    int amountSaveInt;
+    String SapiSavedString ="";
+    String EstrusSavedString ="";
+
+    //jumlah data yang tersimpan    
+    if(!SD.exists("/amountSaved.txt"))
+    {
+        Serial.println("file /amountSaved.txt tidak ada, membuat file baru");
+        myNex.writeStr("t1.txt", "menambahkan data amountSaved.txt");
+        amountSaveInt = 0;
+        amountSaved = SD.open("/amountSaved.txt", FILE_WRITE);
+        amountSaved.print(String(amountSaveInt));
+        amountSaved.close();
+    }
+    amountSaved = SD.open("/amountSaved.txt",FILE_READ);
+    if(amountSaved)
+    {
+        myNex.writeStr("t1.txt", "amountSaved.txt terbaca");
+        String amountSavedString ="";
+            while(amountSaved.available())
+            {
+                amountSavedString += amountSaved.readString();
+            }
+            amountSaveInt = amountSavedString.toInt();
+            Serial.printf("amountSaveInt %d\n", amountSaveInt);
+            amountSaved.close();
+    }
+    else
+    {
+        myNex.writeStr("t1.txt", "gagal membaca amountSaved.txt");
+        Serial.println("gagal membuka amountSaved.txt");
+        return false;
+    }
+
+
+    //ambil data sapi yang tersimpan
+    if(!SD.exists("/SapiSaved.txt"))
+    {
+        Serial.println("file /SapiSaved.txt tidak ada, membuat file baru");
+        SapiSaved = SD.open("/SapiSaved.txt", FILE_WRITE);
+        SapiSaved.print("");
+        SapiSaved.close();
+    }
+    SapiSaved = SD.open("/SapiSaved.txt",FILE_READ);
+    if(SapiSaved)
+    {
+        myNex.writeStr("t1.txt", "/SapiSaved.txt terbaca");
+        while(SapiSaved.available())
+        {
+            SapiSavedString += SapiSaved.readString();
+        }
+        Serial.printf("SapiSavedString %s\n", SapiSavedString.c_str());
+        SapiSaved.close();
+    }
+    else
+    {
+        myNex.writeStr("t1.txt", "gagal membaca SapiSaved.txt");
+        Serial.println("gagal membuka SapiSaved.txt");
+        return false;
+    }
+    
+    //ambil data estrus yang tersimpan
+    if(!SD.exists("/EstrusSaved.txt"))
+    {
+        Serial.println("file /EstrusSaved.txt tidak ada, membuat file baru");
+        EstrusSaved = SD.open("/EstrusSaved.txt", FILE_WRITE);
+        EstrusSaved.print("");
+        EstrusSaved.close();
+    }
+    EstrusSaved = SD.open("/EstrusSaved.txt",FILE_READ);
+    if (EstrusSaved)
+    {
+        myNex.writeStr("t1.txt", "/EstrusSaved.txt terbaca");
+        while(EstrusSaved.available())
+        {
+            EstrusSavedString += EstrusSaved.readString();
+        }
+        Serial.printf("EstrusSavedString %s\n", EstrusSavedString.c_str());
+        EstrusSaved.close();
+    }
+    else
+    {
+        myNex.writeStr("t1.txt", "gagal membaca EstrusSaved.txt");
+        Serial.println("gagal membuka EstrusSaved.txt");
+        return false;
+    }
+    
+
+    SapiSavedString +=  String(SapiID) + ",";
+    EstrusSavedString += String(EstrusVal) + ",";
+    amountSaveInt++;
+    Serial.printf("amountSaveInt add %d\n", amountSaveInt);
+    Serial.printf("SapiSavedString add %s\n", SapiSavedString.c_str());
+    Serial.printf("EstrusSavedString add %s\n", EstrusSavedString.c_str());
+    
+    amountSaved = SD.open("/amountSaved.txt", FILE_WRITE);
+    if(!amountSaved)
+    {
+        myNex.writeStr("t1.txt", "gagal membuka amountSaved.txt");
+        Serial.println("gagal membuka amountSaved.txt");
+        return false;
+    }
+    amountSaved.print(amountSaveInt);
+    
+    SapiSaved = SD.open("/SapiSaved.txt", FILE_WRITE);
+    if (!SapiSaved)
+    {
+        myNex.writeStr("t1.txt", "gagal membuka SapiSaved.txt");
+        Serial.println("gagal membuka SapiSaved.txt");
+        return false;
+    }
+    SapiSaved.print(SapiSavedString);
+    
+    EstrusSaved = SD.open("/EstrusSaved.txt", FILE_WRITE);
+    if(!EstrusSaved)
+    {
+        myNex.writeStr("t1.txt", "gagal membuka EstrusSaved.txt");
+        Serial.println("gagal membuka EstrusSaved.txt");
+        return false;
+    }
+    EstrusSaved.print(EstrusSavedString);
+
+    amountSaved.close();
+    SapiSaved.close();
+    EstrusSaved.close();
+    return true;
 }
