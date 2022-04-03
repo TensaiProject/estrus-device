@@ -1,6 +1,8 @@
 //display
 #include "display.h"
-
+//include ota.h
+#include "ota.h"
+bool otaDone = false;
 #include "sensor.h"
 
 #include "WiFiConnection.h"
@@ -11,12 +13,11 @@ File amountSaved;
 File EstrusSaved;
 File SapiSaved;
 
-#define DATA_REFRESH_RATE 150 // The time between each Data refresh of the page
-                               // Depending on the needs of the project, the DATA_REFRESH_RATE can be set
+int DataRefreshRate = 50;// The time between each Data refresh of the page
+                               // Depending on the needs of the project, the DataRefreshRate can be set
                                // to 50ms or 100ms without a problem. In this example, we use 1000ms, 
                                // as DHT sensor is a slow sensor and gives measurements every 2 seconds
-
-unsigned long pageRefreshTimer = millis(); // Timer for DATA_REFRESH_RATE
+unsigned long pageRefreshTimer = millis(); // Timer for DataRefreshRate
 
 bool newPageLoaded = false; // true when the page is first loaded ( lastCurrentPageId != currentPageId )
 int lastPage = -1; // last current page ID
@@ -26,9 +27,12 @@ void setup()
     Serial.begin(115200);
     myNex.begin();   
     myNex.writeStr("page 0");
+    
     //check display nextion
     if(!displaySetup()  || !checkSensor()) //|| !checkBluetooth()
     {
+        myNex.writeStr("t8.txt", "terdapat masalah, hubungi tim");
+        myNex.writeNum("t8.pco",754);
     while (true){
         myNex.writeNum("t8.bco", 65535);
         delay(250);
@@ -36,15 +40,52 @@ void setup()
         delay(250);
     }        
     }
+    //cek nilai baterai dari batteryStatus, jika habis maka stop proses
+    if(batteryStatus() == 0)
+    {
+        myNex.writeStr("t8.txt", "battery habis");
+        myNex.writeNum("t8.pco",754);
+        while (true){
+            myNex.writeNum("t8.bco", 65535);
+            delay(250);
+            myNex.writeNum("t8.bco", 10262);
+            delay(250);
+        }
+    }
+    myNex.writeStr("t8.txt", "menghubungkan ke wifi");
+    myNex.writeNum("t8.pco",65535);
+    delay(20);
     WiFi.begin();
+    if(WiFi.status() == WL_CONNECTED)
+    {
+        myNex.writeStr("t8.txt","Wifi tersambung");
+        otaSetup();
+        myNex.writeStr("t8.txt","OTA setup selesai");
+        otaDone = true;
+    }
     delay(2000);
     myNex.writeStr("page 1");
+    //if wifi on, run otasetup and make otadone true
+    if(WiFi.status() == WL_CONNECTED)
+    {
+        otaSetup();
+        otaDone = true;
+    }
     
 }
 void loop()
 {   
+    //check wifi is connected, then check otadone, if false run otasetup and server handleclient, if true run server handleclient
+    if(WiFi.status() == WL_CONNECTED && otaDone)
+    {
+        server.handleClient();
+    }
+    else if(WiFi.status() == WL_CONNECTED && !otaDone)
+    {
+        otaSetup();
+        server.handleClient();
+    }
 	myNex.NextionListen();
-
     refereshCurrentPage();
 }
 
@@ -65,15 +106,36 @@ bool checkSensor()
 
 
 void displayRefreshBTBATT(){
+    //jika battery habis, maka berkedip 
+    if(batteryStatus() == 0)
+    {
+        myNex.writeNum("j0.bco", 65535);
+        delay(250);
+        myNex.writeNum("j0.bco", 63488);
+        delay(250);
+    }
+    // else if dibawah 10 dan diatas 0 berkedip 
+    else if(batteryStatus() < 10 && batteryStatus() > 0)
+    {
+        myNex.writeNum("j0.bco", 65535);
+        delay(250);
+        myNex.writeNum("j0.bco", 10262);
+        delay(250);
+    }
+    else
+    {
+        myNex.writeNum("j0.bco", 61342);
+    }
     myNex.writeNum("j0.val",batteryStatus()); // update battery status
     (WiFi.status()==WL_CONNECTED) ? myNex.writeStr("t8.txt",WiFi.SSID()) : myNex.writeStr("t8.txt","tidak terhubung");
+    (WiFi.status()==WL_CONNECTED) ? myNex.writeStr("ipaddress.txt",WiFi.localIP().toString().c_str()) : myNex.writeStr("ipaddress.txt","");
 }
 
 
 void refereshCurrentPage(){
     
-// In this function we refresh the page currently loaded every DATA_REFRESH_RATE
-  if((millis() - pageRefreshTimer) > DATA_REFRESH_RATE){
+// In this function we refresh the page currently loaded every DataRefreshRate
+  if((millis() - pageRefreshTimer) > DataRefreshRate){
     int currentPage = myNex.readNumber("pg.val");
     if(currentPage != lastPage){
         newPageLoaded = true;
@@ -94,6 +156,12 @@ void refereshCurrentPage(){
         statSaveSendPage(newPageLoaded);
         break;
 
+    }
+    if(currentPage == 3){
+        DataRefreshRate = 120;
+    }
+    else{
+        DataRefreshRate = 50;
     }
     displayRefreshBTBATT();
     pageRefreshTimer = millis();
@@ -142,6 +210,10 @@ void statSaveSendPage(bool refresh)
                         if(!dataSendWiFi(SapiSavedSDcard(false),EstrusSavedSDcard(false)))
                         {
                             myNex.writeStr("t1.txt", "gagal mengirim data");
+                            delay(200);
+                            myNex.writeStr("t1.txt", "data akan disimpan ke SD Card");
+                            delay(200);   
+                            goto saveSD;
                             break;
                         }
                         else
@@ -164,13 +236,17 @@ void statSaveSendPage(bool refresh)
             }
             else
             {
-                myNex.writeStr("t1.txt", "gagal tersambung ke WiFi"); 
+                myNex.writeStr("t1.txt", "gagal tersambung ke WiFi");
+                delay(200);
+                myNex.writeStr("t1.txt", "data akan disimpan ke SD Card");
                 delay(200);   
+                goto saveSD;
                 //simpan data ke sdcard            
             }
         }
         else if (myNex.readNumber("via.val") == 1)
         {
+            saveSD:
             if(!SD.begin(5))
             {
                 myNex.writeStr("t1.txt", "gagal membuka SD");
@@ -407,3 +483,5 @@ bool saveDataSDcard(int SapiID, int EstrusVal){
     EstrusSaved.close();
     return true;
 }
+
+

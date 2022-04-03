@@ -10,7 +10,7 @@ int READINGS[WINDOW_SIZE];
 
 float EXP =0;
 float bobot = 0.05;
-
+int EXPbatt = 0;
 bool initializeSensor()
 {
     return true;
@@ -19,19 +19,18 @@ bool initializeSensor()
 int batteryStatus()
 {
     int senBatt = analogRead(pinBatt);
-    float Voltage = senBatt * (3.3 /4096);
-    int battPercentage = 100 * (Voltage - 3.3)/(3.7-3.3);
-    
-    if (battPercentage < 0)
+    EXPbatt = 0.5 * senBatt + (1 - 0.5) * EXPbatt; //0.5 is the weight of the new reading
+    int battPercentage = map(senBatt, 1800, 2000, 0, 100);
+    if(EXPbatt > 100)
     {
-        battPercentage = 0;
+        EXPbatt = 100;
     }
-    if (battPercentage > 100)
+    else if(EXPbatt < 0)
     {
-        battPercentage = 100;
+        EXPbatt = 0;
     }
-    
-    return battPercentage;
+    Serial.printf("batteryStatus: %d - battPercentage: %d\n", senBatt, EXPbatt);    
+    return EXPbatt;
 }
 
 int estrusScan() //mengembalikan nilai pembacaan estrus
@@ -41,7 +40,27 @@ int estrusScan() //mengembalikan nilai pembacaan estrus
   int AVERAGED = 2000; //sengaja dibuat ditengah ADC, jadi ketika adc ada di atas atau dibawah. jaraknya tidak terlalu jauh
   while(millis() - millisNow < 7000){
     SUM = SUM - READINGS[INDEX];
+    
+    //pilih salah satu
     VALUE = analogRead(pinEstrus);
+    // VALUE = (0.8432*analogRead(pinEstrus))- 668.21; //hasil konversi dari alat draminski
+    /* HASIL DARI PERBANDINGAN DRAMINSKI DENGAN ADC */
+    /*
+    nilai adc	      nilai estrus
+    866,54545	        40
+    802,9090909	      50
+    881,3636364	      60
+    1049,545455	     190
+    1204,111111	     370
+
+
+    Didapatkan hasil 
+    y = 0,8432x - 668,21
+    R² = 0,9541
+    y adalah nilai estrus draminski
+    x adalah nilai adc
+
+    */
     READINGS[INDEX] = VALUE;
     SUM = SUM + VALUE; 
     INDEX = (INDEX+1) % WINDOW_SIZE;

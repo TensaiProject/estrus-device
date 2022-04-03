@@ -3,7 +3,7 @@
 String wifiListString;
 int WifiPage = 0;
 int lastWifiPage = 0;
-String PostEstrusURL = "http://estrus.iotum.id/public/Sapi";
+String PostEstrusURL = "http://api-estrus.iotum.id/public/Sapi";
 
 void ClearListWiFi()
 {
@@ -31,7 +31,7 @@ bool WiFiStatus(){
         return false;
     }
 }
-void WiFiStatusAfterConnecting()
+bool WiFiStatusAfterConnecting()
 {
         if(WiFi.status() == WL_CONNECTED){
         Serial.printf("WiFi berhasil terkoneksi\n");
@@ -39,6 +39,7 @@ void WiFiStatusAfterConnecting()
         delay(10);
         myNex.writeNum("disconnect.val", 0);
         delay(10);
+        return true;
         // myNex.writeStr("t2.txt", WiFi.SSID());
         // myNex.writeNum("refreshWiFi.val", 0);
     }
@@ -48,6 +49,7 @@ void WiFiStatusAfterConnecting()
         delay(10);
         myNex.writeNum("disconnect.val", 1);
         delay(10);
+        return false;
     }
 }
 void WiFiDisconnect(){
@@ -140,13 +142,17 @@ void WiFiSettingPage(bool refresh)
     if(refresh)
     {
         Serial.printf("beda halaman, lakukan scan ulang\n");
+        myNex.writeStr("t7.txt","mohon ditunggu");
+        WiFi.begin();
+        // int millisecond = millis();
+        // while(WiFi.status() != WL_CONNECTED && millis() - millisecond < 10000)
+        // {
+        // }
+        if(!WiFiStatusAfterConnecting()){
+            WiFiDisconnect();
+        }
         WiFiScan();
         WiFiList();
-        WiFi.begin();
-        int millisecond = millis();
-        while(WiFi.status() != WL_CONNECTED && millis() - millisecond < 10000)
-        {
-        }
         WiFiStatusAfterConnecting();
     }
     
